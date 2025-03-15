@@ -8,32 +8,17 @@ from typing import Tuple
 
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 3
+BATCH_SIZE = 1
 MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
 MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
-
-
-# Model ofiary (resnet18)
-class VictimModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.resnet = models.resnet18(pretrained=False)
-        self.resnet.fc = nn.Linear(512, 44)  # Dopasowanie do liczby klas
-        self.hidden_features = None
-        self.resnet.layer4.register_forward_hook(self.hook)
-
-    def hook(self, module, input, output):
-        self.hidden_features = output.clone().detach()
-
-    def forward(self, x):
-        _ = self.resnet(x)
-        return self.hidden_features
 
 # Model atakujący (RMIA)
 class AttackModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc = nn.Sequential(
+            nn.Linear(3117, 512),
+            nn.ReLU(),
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, 1),
@@ -41,7 +26,7 @@ class AttackModel(nn.Module):
         )
 
     def forward(self, x):
-        print("Shape before fc:", x.shape)
+        #print("Shape before fc:", x.shape)
         return self.fc(x)
 
 
@@ -94,13 +79,13 @@ class AttackDataset(torch.utils.data.Dataset):
             img = img.to(DEVICE)
             with torch.no_grad():
                 feature = self.victim_model(img)
-            temp = torch.cat((torch.flatten(feature), label.to(DEVICE).to(torch.float32)))
+            temp = torch.cat((torch.flatten(img), torch.flatten(feature), label.to(DEVICE).to(torch.float32)))
             tensor_list.append(temp)
             #self.features.append(torch.flatten(feature))
             #self.features.append(label.to(DEVICE).to(torch.float32))
             self.membership.append(is_member)
 
-        self.features = torch.cat(tensor_list, dim=0)
+        self.features = torch.stack(tensor_list, dim=0)
         #self.features = torch.cat(self.features)
         self.membership = torch.cat(self.membership)
 
@@ -119,7 +104,7 @@ def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
         for features, membership in train_loader:
             features, membership = features.to(DEVICE), membership.to(DEVICE)
             pred = model(features)
-            loss = criterion(pred, membership)
+            loss = criterion(pred, membership.view(-1, 1).float())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

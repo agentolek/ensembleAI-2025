@@ -8,9 +8,9 @@ from typing import Tuple
 
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 2
-MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
-MIA_CKPT_PATH = "tasks-2025-main/task_1/01_MIA_69.pt"
+BATCH_SIZE = 3
+MEMBERSHIP_DATASET_PATH = "/home/agentolek/Documents/hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"
+MIA_CKPT_PATH = "/home/agentolek/Documents/hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"
 
 # Model ofiary (resnet18)
 class VictimModel(nn.Module):
@@ -81,18 +81,18 @@ class AttackDataset(torch.utils.data.Dataset):
         self.victim_model = victim_model
         self.dataset = dataset
         self.features = []
-        self.labels = []
         self.membership = []
         self.prepare_data()
 
     def prepare_data(self):
         dataloader = DataLoader(self.dataset, batch_size=BATCH_SIZE, shuffle=False)
-        for _, img, _, membership in dataloader:
+        for _, img, label, is_member in dataloader:
             img = img.to(DEVICE)
             with torch.no_grad():
                 feature = self.victim_model(img)
-            self.features.append(feature)
-            self.labels.append(membership)
+            self.features.append(torch.flatten(feature))
+            self.features.append(label.to(DEVICE).to(torch.float32))
+            self.membership.append(is_member)
         self.features = torch.cat(self.features)
         self.labels = torch.cat(self.labels)
 
@@ -109,7 +109,7 @@ def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
     for epoch in range(epochs):
         total_loss = 0
         for features, labels in train_loader:
-            features, labels = features.to(DEVICE), labels.to(DEVICE).float().unsqueeze(1)
+            features, labels = features.to(DEVICE), membership.to(DEVICE)
             pred = model(features)
             loss = criterion(pred, labels)
             optimizer.zero_grad()
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     dataset = torch.load(MEMBERSHIP_DATASET_PATH)
 
     victim_model = models.resnet18().to(DEVICE)
-    victim_model.fc = torch.nn.Linear(512, 44)
+    victim_model.fc = torch.nn.Linear(512, 44).to(DEVICE)
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
 
     victim_model.to(DEVICE)

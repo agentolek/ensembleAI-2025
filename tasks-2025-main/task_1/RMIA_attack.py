@@ -41,7 +41,7 @@ class AttackModel(nn.Module):
 
     def forward(self, x):
         return self.fc(x)
-
+    
 
 class TaskDataset(torch.utils.data.Dataset):
     def __init__(self, transform=None):
@@ -94,13 +94,13 @@ class AttackDataset(torch.utils.data.Dataset):
             self.features.append(label.to(DEVICE).to(torch.float32))
             self.membership.append(is_member)
         self.features = torch.cat(self.features)
-        self.labels = torch.cat(self.labels)
+        self.membership = torch.cat(self.membership)
 
     def __getitem__(self, index):
-        return self.features[index], self.labels[index]
+        return self.features[index], self.membership[index]
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.membership)
 
 
 # Trening atakującego modelu
@@ -108,10 +108,10 @@ def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
     model.train()
     for epoch in range(epochs):
         total_loss = 0
-        for features, labels in train_loader:
-            features, labels = features.to(DEVICE), membership.to(DEVICE)
+        for features, membership in train_loader:
+            features, membership = features.to(DEVICE), membership.to(DEVICE)
             pred = model(features)
-            loss = criterion(pred, labels)
+            loss = criterion(pred, membership)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -125,8 +125,6 @@ if __name__ == "__main__":
     victim_model = models.resnet18().to(DEVICE)
     victim_model.fc = torch.nn.Linear(512, 44).to(DEVICE)
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
-
-    victim_model.to(DEVICE)
     victim_model.eval()
 
     attack_dataset = AttackDataset(victim_model, dataset)
@@ -137,3 +135,4 @@ if __name__ == "__main__":
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
     train_attack_model(train_loader, attack_model, criterion, optimizer)
+    

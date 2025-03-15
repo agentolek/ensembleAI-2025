@@ -11,8 +11,8 @@ from torcheval.metrics import BinaryAUROC
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(DEVICE)
-MEMBERSHIP_DATASET_PATH = "/net/tscratch/people/tutorial040/task1/pub.pt"
-# MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
+# MEMBERSHIP_DATASET_PATH = "/net/tscratch/people/tutorial040/task1/pub.pt"
+MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
 BATCH_SIZE = 1
 
 

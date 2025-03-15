@@ -9,8 +9,9 @@ from typing import Tuple
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 3
-MEMBERSHIP_DATASET_PATH = "/home/agentolek/Documents/hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"
-MIA_CKPT_PATH = "/home/agentolek/Documents/hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"
+MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
+MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+
 
 # Model ofiary (resnet18)
 class VictimModel(nn.Module):
@@ -40,8 +41,9 @@ class AttackModel(nn.Module):
         )
 
     def forward(self, x):
+        print("Shape before fc:", x.shape)
         return self.fc(x)
-    
+
 
 class TaskDataset(torch.utils.data.Dataset):
     def __init__(self, transform=None):
@@ -84,16 +86,22 @@ class AttackDataset(torch.utils.data.Dataset):
         self.membership = []
         self.prepare_data()
 
+
     def prepare_data(self):
         dataloader = DataLoader(self.dataset, batch_size=BATCH_SIZE, shuffle=False)
+        tensor_list = []
         for _, img, label, is_member in dataloader:
             img = img.to(DEVICE)
             with torch.no_grad():
                 feature = self.victim_model(img)
-            self.features.append(torch.flatten(feature))
-            self.features.append(label.to(DEVICE).to(torch.float32))
+            temp = torch.cat((torch.flatten(feature), label.to(DEVICE).to(torch.float32)))
+            tensor_list.append(temp)
+            #self.features.append(torch.flatten(feature))
+            #self.features.append(label.to(DEVICE).to(torch.float32))
             self.membership.append(is_member)
-        self.features = torch.cat(self.features)
+
+        self.features = torch.cat(tensor_list, dim=0)
+        #self.features = torch.cat(self.features)
         self.membership = torch.cat(self.membership)
 
     def __getitem__(self, index):
@@ -135,4 +143,3 @@ if __name__ == "__main__":
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
     train_attack_model(train_loader, attack_model, criterion, optimizer)
-    

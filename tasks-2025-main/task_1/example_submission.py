@@ -104,7 +104,9 @@ def membership_prediction(model):
 
 
 if __name__ == '__main__':
-    model = load_model(model_name=..., model_path=...)                 # Insert model name and path to your model
+
+    model = models.resnet18()
+    # model = load_model(model_name=..., model_path=...)                 # Insert model name and path to your model
     preds = membership_prediction(model)
     preds.to_csv("submission.csv", index=False)
 

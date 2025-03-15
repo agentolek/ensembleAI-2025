@@ -3,6 +3,7 @@ import requests
 import torch
 import torch.nn as nn
 import os
+import torchvision.transforms as transforms
 
 from dotenv import load_dotenv
 from torch.utils.data import Dataset
@@ -27,6 +28,11 @@ allowed_models = {
     "resnet50": models.resnet50,
 }
 
+
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.2980, 0.2962, 0.2987], std=[0.2886, 0.2875, 0.2889])
+])
 
 class TaskDataset(Dataset):
     def __init__(self, transform=None):

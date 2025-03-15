@@ -6,10 +6,13 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision import models
 from typing import Tuple
+from torcheval.metrics import BinaryAUROC
+
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(DEVICE)
 MEMBERSHIP_DATASET_PATH = "/net/tscratch/people/tutorial040/task1/pub.pt"
+# MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
 BATCH_SIZE = 1
 
 
@@ -93,20 +96,30 @@ def test_loop(dataloader, model, loss_fn):
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
 
+    test_preds = []
+    correct_preds = dataloader.dataset.membership
+
     # Evaluating the model with torch.no_grad() ensures that no gradients are computed during test mode
     # also serves to reduce unnecessary gradient computations and memory usage for tensors with requires_grad=True
     with torch.no_grad():
+
         for _, img, lbl, member in dataloader:
         
             img, lbl, member = img.to(DEVICE), lbl.to(DEVICE), member.to(DEVICE)
 
             X = torch.cat((img.flatten(), lbl))
             pred = model(X)
-            test_loss += loss_fn(pred, member).item()
-            correct += (pred.argmax(1) == member).type(torch.float).sum().item()
+            test_preds.append(pred)
+            # test_loss += loss_fn(pred, member).item()
+            # correct += (pred.argmax(1) == member).type(torch.float).sum().item()
 
-    test_loss /= num_batches
-    correct /= size
+    # test_loss /= num_batches
+    # correct /= size
+    metric = BinaryAUROC()
+    test_preds = torch.Tensor(test_preds)
+    correct_preds = torch.Tensor(correct_preds)
+    metric.update(test_preds, correct_preds)
+    print(f"BinaryAUROC result: {metric.compute()}\n")
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 

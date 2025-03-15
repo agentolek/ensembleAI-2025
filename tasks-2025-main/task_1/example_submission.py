@@ -3,12 +3,15 @@ import requests
 import torch
 import torch.nn as nn
 
+import os
+from dotenv import load_dotenv 
 from torch.utils.data import Dataset
 from torchvision import models
 from typing import Tuple
 
+load_dotenv()
 
-TOKEN = ...                         # Your token here
+TOKEN = os.environ["ATHENA_TOKEN"]                     # Your token here
 URL = "149.156.182.9:6060/task-1/submit"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 1

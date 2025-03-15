@@ -7,15 +7,16 @@ import pickle
 import requests
 import torch
 import torch.nn as nn
+from PIL import Image
 
 from torch.utils.data import Dataset
 from typing import Tuple
 
 
-TOKEN = ...                         # Your token here
-SUBMIT_URL = "149.156.182.9:6060/task-2/submit"
-RESET_URL = "149.156.182.9:6060/task-2/reset"
-QUERY_URL = "149.156.182.9:6060/task-2/query"
+TOKEN = ""
+SUBMIT_URL = "http://149.156.182.9:6060/task-2/submit"
+RESET_URL = "http://149.156.182.9:6060/task-2/reset"
+QUERY_URL = "http://149.156.182.9:6060/task-2/query"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -51,8 +52,38 @@ def generate_random_image():
     return img_bytes.getvalue()
 
 
+def get_bytes(single_element):
+    subset = single_element[1]  # Modify this if the data is not a tensor
+    print(subset)
+
+    img_bytes = io.BytesIO()
+    subset.save(img_bytes, format="PNG")
+    byte_data = img_bytes.getvalue()
+    return byte_data
+
+
+def load_images():
+    dataset = torch.load('/net/tscratch/people/tutorial040/task2/ModelStealingPub.pt', weights_only=False)
+    return dataset
+
+def get_images():
+    dataset = torch.load('/net/tscratch/people/tutorial040/task2/ModelStealingPub.pt', weights_only=False)
+    subset = dataset[0][1]  # Modify this if the data is not a tensor
+    print(subset)
+    # Create a BytesIO object to hold the byte data
+    # Save the sliced dataset to the BytesIO object in .pt format
+    img_bytes = io.BytesIO()
+
+    # Save the image to the BytesIO object in PNG format (you can choose other formats like JPEG)
+    subset.save(img_bytes, format="PNG")
+
+    # Get the byte data
+    byte_data = img_bytes.getvalue()
+    # Get the byte data
+    return byte_data
+
 def quering_random():
-    files = [("files", ("image2.png", generate_random_image(), "image/png")) for _ in range(1000)]
+    files = [("files", ("image2.png", generate_random_image(), "image/png")) for _ in range(10)]
     response = requests.post(
         QUERY_URL,
         headers={"token": TOKEN},
@@ -63,6 +94,8 @@ def quering_random():
         np_array = np.load(buffer)
         print(np_array.shape)
         print(np_array)
+    else:
+        print(response.text)
 
 def reset_example():
     response = requests.post(
@@ -72,36 +105,22 @@ def reset_example():
 
     print(response.text)
 
+
 def quering_example():
-    dataset = torch.load(...)                   # Path to ModelStealingPub.pt
-    images = [dataset.imgs[idx] for idx in np.random.permutation(1000)]
-
-    image_data = []
-    for img in images:
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='PNG')
-        img_byte_arr.seek(0)
-        img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
-        image_data.append(img_base64)
-
-    payload = json.dumps(image_data)
-    response = requests.post(QUERY_URL, headers={"token": TOKEN}, files={"file": payload})
+    dataset = load_images()
+    files = [("files", ("image2.png", get_bytes(dataset[i]), "image/png")) for i in range(10)]
+    response = requests.post(
+        QUERY_URL,
+        headers={"token": TOKEN},
+        files=files
+    )
     if response.status_code == 200:
-        representation = response.json()["representations"]
+        buffer = io.BytesIO(response.content)
+        np_array = np.load(buffer)
+        print(np_array.shape)
+        print(np_array)
     else:
-        raise Exception(
-            f"Model stealing failed. Code: {response.status_code}, content: {response.json()}"
-        )
-    # Store the output in a file.
-    # Be careful to store all the outputs from the API since the number of queries is limited.
-    with open('out.pickle', 'wb') as handle:
-        pickle.dump(representation, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    # Restore the output from the file.
-    with open('out.pickle', 'rb') as handle:
-        representation = pickle.load(handle)
-
-    print(len(representation))
+        print(response.text)
 
 
 def submitting_example():
@@ -128,7 +147,7 @@ def submitting_example():
             raise Exception(f"Invalid model, {e=}")
         try:
             out = stolen_model.run(
-                None, {"x": np.random.randn(1, 3, 32, 32).astype(np.float32)}
+                None, {"x": np.random.randn(32, 3, 32, 32).astype(np.float32)}
             )[0][0]
         except Exception as e:
             raise Exception(f"Some issue with the input, {e=}")
@@ -138,8 +157,8 @@ def submitting_example():
     print(response.status_code, response.text)
 
 
-
 if __name__ == '__main__':
+    # reset_example()
     quering_example()
-    submitting_example()
-
+    # quering_random()
+    # submitting_example()

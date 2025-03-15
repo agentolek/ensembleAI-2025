@@ -68,6 +68,7 @@ class NeuralNetwork(nn.Module):
 def train_loop(dataloader, model, loss_fn, optimizer):
     # size = len(dataloader.dataset)
     model.train()
+    counter = 0
 
     for _, img, lbl, member in dataloader:
         
@@ -83,24 +84,21 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
         optimizer.zero_grad()
 
-        # if batch % 100 == 0:
-        #     loss, current = loss.item(), batch * BATCH_SIZE + len(X)
-        #     print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        counter += 1
+
+        if counter % 100 == 0:
+            loss, current = loss.item(), counter
+            print(f"loss: {loss:>7f}  [{current:>5d}/{counter:>5d}]")
 
 
-def test_loop(dataloader, model, loss_fn):
+def test_loop(dataloader, model):
     # Set the model to evaluation mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
     model.eval()
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    test_loss, correct = 0, 0
 
     test_preds = []
     correct_preds = dataloader.dataset.membership
 
-    # Evaluating the model with torch.no_grad() ensures that no gradients are computed during test mode
-    # also serves to reduce unnecessary gradient computations and memory usage for tensors with requires_grad=True
     with torch.no_grad():
 
         for _, img, lbl, member in dataloader:
@@ -110,17 +108,12 @@ def test_loop(dataloader, model, loss_fn):
             X = torch.cat((img.flatten(), lbl))
             pred = model(X)
             test_preds.append(pred)
-            # test_loss += loss_fn(pred, member).item()
-            # correct += (pred.argmax(1) == member).type(torch.float).sum().item()
 
-    # test_loss /= num_batches
-    # correct /= size
     metric = BinaryAUROC()
     test_preds = torch.Tensor(test_preds)
     correct_preds = torch.Tensor(correct_preds)
     metric.update(test_preds, correct_preds)
     print(f"BinaryAUROC result: {metric.compute()}\n")
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 
 if __name__ == "__main__":
@@ -144,14 +137,14 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE)
     model = NeuralNetwork().to(DEVICE)
     
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.1e-5)
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.03)
 
     epochs = 10
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         train_loop(train_dataloader, model, loss_fn, optimizer)
-        test_loop(test_dataloader, model, loss_fn)
+        test_loop(test_dataloader, model)
 
     print("Done!")
 

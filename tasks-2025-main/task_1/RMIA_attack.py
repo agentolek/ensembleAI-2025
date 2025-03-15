@@ -4,12 +4,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.models as models
 from torch.utils.data import DataLoader
+from typing import Tuple
 
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 2
-MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"
-MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"
+MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
+MIA_CKPT_PATH = "tasks-2025-main/task_1/01_MIA_69.pt"
 
 # Model ofiary (resnet18)
 class VictimModel(nn.Module):
@@ -41,6 +42,39 @@ class AttackModel(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
+
+class TaskDataset(torch.utils.data.Dataset):
+    def __init__(self, transform=None):
+
+        self.ids = []
+        self.imgs = []
+        self.labels = []
+
+        self.transform = transform
+
+    def __getitem__(self, index) -> Tuple[int, torch.Tensor, int]:
+        id_ = self.ids[index]
+        img = self.imgs[index]
+        if not self.transform is None:
+            img = self.transform(img)
+        label = self.labels[index]
+        return id_, img, label
+
+    def __len__(self):
+        return len(self.ids)
+
+
+class MembershipDataset(TaskDataset):
+    def __init__(self, transform=None):
+        super().__init__(transform)
+        self.membership = []
+
+    def __getitem__(self, index) -> Tuple[int, torch.Tensor, int, int]:
+        id_, img, label = super().__getitem__(index)
+        return id_, img, label, self.membership[index]
+
+torch.serialization.add_safe_globals([MembershipDataset])
+
 # Przygotowanie danych do ataku
 class AttackDataset(torch.utils.data.Dataset):
     def __init__(self, victim_model, dataset):
@@ -48,6 +82,7 @@ class AttackDataset(torch.utils.data.Dataset):
         self.dataset = dataset
         self.features = []
         self.labels = []
+        self.membership = []
         self.prepare_data()
 
     def prepare_data(self):
@@ -56,8 +91,8 @@ class AttackDataset(torch.utils.data.Dataset):
             img = img.to(DEVICE)
             with torch.no_grad():
                 feature = self.victim_model(img)
-            self.features.append(feature.cpu())
-            self.labels.append(membership.cpu())
+            self.features.append(feature)
+            self.labels.append(membership)
         self.features = torch.cat(self.features)
         self.labels = torch.cat(self.labels)
 
@@ -66,6 +101,7 @@ class AttackDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.labels)
+
 
 # Trening atakującego modelu
 def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
@@ -82,20 +118,17 @@ def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
             total_loss += loss.item()
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader)}")
 
+
 if __name__ == "__main__":
-    #state_dict = torch.load(MIA_CKPT_PATH, map_location=DEVICE)
-    #print(state_dict.keys())  # Sprawdź dostępne warstwy
+    dataset = torch.load(MEMBERSHIP_DATASET_PATH)
 
-    victim_model = models.resnet18()
-    victim_model.fc = torch.nn.Linear(in_features=512, out_features=44)
-
-    # Wczytaj zapisany stan modelu
+    victim_model = models.resnet18().to(DEVICE)
+    victim_model.fc = torch.nn.Linear(512, 44)
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
 
     victim_model.to(DEVICE)
     victim_model.eval()
 
-    dataset = torch.load(MEMBERSHIP_DATASET_PATH, weights_only=False)
     attack_dataset = AttackDataset(victim_model, dataset)
     train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
 

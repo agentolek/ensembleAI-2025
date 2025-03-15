@@ -83,11 +83,19 @@ def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader)}")
 
 if __name__ == "__main__":
-    victim_model = VictimModel().to(DEVICE)
+    #state_dict = torch.load(MIA_CKPT_PATH, map_location=DEVICE)
+    #print(state_dict.keys())  # Sprawdź dostępne warstwy
+
+    victim_model = models.resnet18()
+    victim_model.fc = torch.nn.Linear(in_features=512, out_features=44)
+
+    # Wczytaj zapisany stan modelu
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
+
+    victim_model.to(DEVICE)
     victim_model.eval()
 
-    dataset = torch.load(MEMBERSHIP_DATASET_PATH)
+    dataset = torch.load(MEMBERSHIP_DATASET_PATH, weights_only=False)
     attack_dataset = AttackDataset(victim_model, dataset)
     train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -96,4 +104,3 @@ if __name__ == "__main__":
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
     train_attack_model(train_loader, attack_model, criterion, optimizer)
-    

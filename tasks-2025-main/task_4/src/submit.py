@@ -6,7 +6,7 @@ if __name__ == "__main__":
     weights_path = "model_weights.pth"
 
     url = "http://149.156.182.9:6060/task-4/submit"
-    auth_token = "aHX36NuduY3bHcPVeIJMbuW5X0ZBUS"
+    auth_token = ".."
 
     with open(onnx_model_path, "rb") as onnx_file, open(model_weights_path, "rb") as weights_file:
         headers = {

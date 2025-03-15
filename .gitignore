@@ -175,3 +175,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+tasks-2025-main/task_1/submission.csv
+.gitignore
+tasks-2025-main/task_1/base_pred_model_2.py

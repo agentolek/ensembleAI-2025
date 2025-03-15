@@ -1,22 +1,49 @@
 import pandas as pd
 import torch
 import torch.nn as nn
-
-from torch.utils.data import Dataset
+import torch.optim as optim
+import torchvision.models as models
 from torch.utils.data import DataLoader
-from torchvision import models
 from typing import Tuple
-from torcheval.metrics import BinaryAUROC
 
-
+# Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(DEVICE)
-# MEMBERSHIP_DATASET_PATH = "/net/tscratch/people/tutorial040/task1/pub.pt"
-MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/pub.pt"
-BATCH_SIZE = 1
+BATCH_SIZE = 3
+MEMBERSHIP_DATASET_PATH = "/net/tscratch/people/tutorial040/task1/pub.pt"
+MIA_CKPT_PATH = "/net/tscratch/people/tutorial040/task1/01_MIA_69.pt"
 
+# Model ofiary (resnet18)
+class VictimModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.resnet = models.resnet18(pretrained=False)
+        self.resnet.fc = nn.Linear(512, 44)  # Dopasowanie do liczby klas
+        self.hidden_features = None
+        self.resnet.layer4.register_forward_hook(self.hook)
 
-class TaskDataset(Dataset):
+    def hook(self, module, input, output):
+        self.hidden_features = output.clone().detach()
+
+    def forward(self, x):
+        _ = self.resnet(x)
+        return self.hidden_features
+
+# Model atakujący (RMIA)
+class AttackModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+    
+
+class TaskDataset(torch.utils.data.Dataset):
     def __init__(self, transform=None):
 
         self.ids = []
@@ -45,110 +72,67 @@ class MembershipDataset(TaskDataset):
     def __getitem__(self, index) -> Tuple[int, torch.Tensor, int, int]:
         id_, img, label = super().__getitem__(index)
         return id_, img, label, self.membership[index]
-    
+
 torch.serialization.add_safe_globals([MembershipDataset])
 
-class NeuralNetwork(nn.Module):
+# Przygotowanie danych do ataku
+class AttackDataset(torch.utils.data.Dataset):
+    def __init__(self, victim_model, dataset):
+        self.victim_model = victim_model
+        self.dataset = dataset
+        self.features = []
+        self.membership = []
+        self.prepare_data()
 
-    def __init__(self):
-        super().__init__()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(3073, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-        )
+    def prepare_data(self):
+        dataloader = DataLoader(self.dataset, batch_size=BATCH_SIZE, shuffle=False)
+        for _, img, label, is_member in dataloader:
+            img = img.to(DEVICE)
+            with torch.no_grad():
+                feature = self.victim_model(img)
+            self.features.append(torch.flatten(feature))
+            self.features.append(label.to(DEVICE).to(torch.float32))
+            self.membership.append(is_member)
+        self.features = torch.cat(self.features)
+        self.membership = torch.cat(self.membership)
 
-    def forward(self, x):
-        logits = self.linear_relu_stack(x)
-        return logits
-    
+    def __getitem__(self, index):
+        return self.features[index], self.membership[index]
 
-def train_loop(dataloader, model, loss_fn, optimizer):
-    # size = len(dataloader.dataset)
+    def __len__(self):
+        return len(self.membership)
+
+
+# Trening atakującego modelu
+def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
     model.train()
-    counter = 0
-
-    for _, img, lbl, member in dataloader:
-        
-        img, lbl, member = img.to(DEVICE).to(torch.float32), lbl.to(DEVICE).to(torch.float32), member.to(DEVICE).to(torch.float32)
-
-        X = torch.cat((img.flatten(), lbl))
-        
-        pred = model(X)
-        loss = loss_fn(pred, member)
-
-        # Backpropagation
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-
-        counter += 1
-
-        if counter % 100 == 0:
-            loss, current = loss.item(), counter
-            print(f"loss: {loss:>7f}  [{current:>5d}/{counter:>5d}]")
-
-
-def test_loop(dataloader, model):
-    # Set the model to evaluation mode - important for batch normalization and dropout layers
-    # Unnecessary in this situation but added for best practices
-    model.eval()
-
-    test_preds = []
-    correct_preds = dataloader.dataset.membership
-
-    with torch.no_grad():
-
-        for _, img, lbl, member in dataloader:
-        
-            img, lbl, member = img.to(DEVICE), lbl.to(DEVICE), member.to(DEVICE)
-
-            X = torch.cat((img.flatten(), lbl))
-            pred = model(X)
-            test_preds.append(pred)
-
-    metric = BinaryAUROC()
-    test_preds = torch.Tensor(test_preds)
-    correct_preds = torch.Tensor(correct_preds)
-    metric.update(test_preds, correct_preds)
-    print(f"BinaryAUROC result: {metric.compute()}\n")
+    for epoch in range(epochs):
+        total_loss = 0
+        for features, membership in train_loader:
+            features, membership = features.to(DEVICE), membership.to(DEVICE)
+            pred = model(features)
+            loss = criterion(pred, membership)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader)}")
 
 
 if __name__ == "__main__":
-    data: MembershipDataset = torch.load(MEMBERSHIP_DATASET_PATH)
+    dataset = torch.load(MEMBERSHIP_DATASET_PATH)
+
+    victim_model = models.resnet18().to(DEVICE)
+    victim_model.fc = torch.nn.Linear(512, 44).to(DEVICE)
+    victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
+    victim_model.eval()
+
+    attack_dataset = AttackDataset(victim_model, dataset)
+    train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+    attack_model = AttackModel().to(DEVICE)
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
+
+    train_attack_model(train_loader, attack_model, criterion, optimizer)
     
-    train_data = MembershipDataset()
-    test_data = MembershipDataset()
-
-    train_data.ids = data.ids[:10000]
-    train_data.imgs = data.imgs[:10000]
-    train_data.labels = data.labels[:10000]
-    train_data.membership = data.membership[:10000]
-
-    test_data.ids = data.ids[10000:]
-    test_data.imgs = data.imgs[10000:]
-    test_data.labels = data.labels[10000:]
-    test_data.membership = data.membership[10000:]
-
-
-    train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE)
-    test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE)
-    model = NeuralNetwork().to(DEVICE)
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.1e-5)
-    loss_fn = nn.MSELoss()
-
-    epochs = 10
-    for t in range(epochs):
-        print(f"Epoch {t+1}\n-------------------------------")
-        train_loop(train_dataloader, model, loss_fn, optimizer)
-        test_loop(test_dataloader, model)
-
-    print("Done!")
-

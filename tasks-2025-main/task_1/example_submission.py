@@ -86,7 +86,7 @@ def load_model(model_name, model_path):
 def membership_prediction(model):
     dataset: MembershipDataset = torch.load(MEMBERSHIP_DATASET_PATH)
     dataloader = inference_dataloader(dataset, BATCH_SIZE)
-
+    print(len(dataloader.dataset))
     outputs_list = []
 
     for _, img, _ in dataloader:

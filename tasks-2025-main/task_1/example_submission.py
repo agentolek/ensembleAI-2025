@@ -2,18 +2,23 @@ import pandas as pd
 import requests
 import torch
 import torch.nn as nn
+import os
 
+from dotenv import load_dotenv
 from torch.utils.data import Dataset
 from torchvision import models
 from typing import Tuple
+import torch.serialization
 
+load_dotenv()
 
-TOKEN = ...                         # Your token here
+TOKEN = os.environ["ATHENA_TOKEN"]                      # Your token here
 URL = "149.156.182.9:6060/task-1/submit"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 1
-MEMBERSHIP_DATASET_PATH = ...       # Path to priv_out_.pt
-MIA_CKPT_PATH = ...                 # Path to 01_MIA_69.pt
+BATCH_SIZE = 2
+MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
+MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+
 
 
 allowed_models = {
@@ -47,13 +52,13 @@ class TaskDataset(Dataset):
 class MembershipDataset(TaskDataset):
     def __init__(self, transform=None):
         super().__init__(transform)
-        self.membership = []
 
     def __getitem__(self, index) -> Tuple[int, torch.Tensor, int, int]:
         id_, img, label = super().__getitem__(index)
-        return id_, img, label, self.membership[index]
+        return id_, img, label
 
 
+torch.serialization.add_safe_globals([MembershipDataset])
 
 def inference_dataloader(dataset: MembershipDataset, batch_size):
     return torch.utils.data.DataLoader(dataset, batch_size, shuffle=False)
@@ -62,7 +67,7 @@ def inference_dataloader(dataset: MembershipDataset, batch_size):
 def load_model(model_name, model_path):
     try:
         model: nn.Module = allowed_models[model_name](weights=None)
-        model.fc = nn.Linear(model.fc.weight.shape[1], 10)
+        model.fc = nn.Linear(model.fc.weight.shape[1], 44)
     except Exception as e:
         raise Exception(
             f"Invalid model class, {e}, only {allowed_models.keys()} are allowed"
@@ -70,7 +75,7 @@ def load_model(model_name, model_path):
 
     try:
         model_state_dict = torch.load(model_path, map_location=DEVICE)
-        model.load_state_dict(model_state_dict, strict=True)
+        model.load_state_dict(model_state_dict, strict=False)
         model.eval()
     except Exception as e:
         raise Exception(f"Invalid model, {e}")
@@ -84,7 +89,7 @@ def membership_prediction(model):
 
     outputs_list = []
 
-    for _, img, _, _ in dataloader:
+    for _, img, _ in dataloader:
         img = img.to(DEVICE)
 
         with torch.no_grad():
@@ -101,7 +106,8 @@ def membership_prediction(model):
 
 
 if __name__ == '__main__':
-    model = load_model(model_name=..., model_path=...)                 # Insert model name and path to your model
+    model = models.resnet18()
+    # model = load_model(model_name=..., model_path=...)                 # Insert model name and path to your model
     preds = membership_prediction(model)
     preds.to_csv("submission.csv", index=False)
 

@@ -5,12 +5,22 @@ import torch.optim as optim
 import torchvision.models as models
 from torch.utils.data import DataLoader
 from typing import Tuple
+import torchvision.transforms as transforms
+
 
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 1
 MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
 MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+
+# Definicja transformacji
+transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(),  # Augmentacja
+    transforms.RandomVerticalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.2980, 0.2962, 0.2987], std=[0.2886, 0.2875, 0.2889])
+])
 
 # Model atakujący (RMIA)
 class AttackModel(nn.Module):
@@ -31,7 +41,7 @@ class AttackModel(nn.Module):
 
 
 class TaskDataset(torch.utils.data.Dataset):
-    def __init__(self, transform=None):
+    def __init__(self, transform=transform):
 
         self.ids = []
         self.imgs = []
@@ -42,7 +52,7 @@ class TaskDataset(torch.utils.data.Dataset):
     def __getitem__(self, index) -> Tuple[int, torch.Tensor, int]:
         id_ = self.ids[index]
         img = self.imgs[index]
-        if not self.transform is None:
+        if self.transform is not None:
             img = self.transform(img)
         label = self.labels[index]
         return id_, img, label
@@ -52,7 +62,7 @@ class TaskDataset(torch.utils.data.Dataset):
 
 
 class MembershipDataset(TaskDataset):
-    def __init__(self, transform=None):
+    def __init__(self, transform=transform):
         super().__init__(transform)
         self.membership = []
 
@@ -97,14 +107,14 @@ class AttackDataset(torch.utils.data.Dataset):
 
 
 # Trening atakującego modelu
-def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
+def train_attack_model(train_loader, model, loss_fn, optimizer, epochs=10):
     model.train()
     for epoch in range(epochs):
         total_loss = 0
         for features, membership in train_loader:
             features, membership = features.to(DEVICE), membership.to(DEVICE)
             pred = model(features)
-            loss = criterion(pred, membership.view(-1, 1).float())
+            loss = loss_fn(pred, membership.view(-1, 1).float())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -124,7 +134,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     attack_model = AttackModel().to(DEVICE)
-    criterion = nn.BCELoss()
+    loss_fn = nn.BCELoss()
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
-    train_attack_model(train_loader, attack_model, criterion, optimizer)
+    train_attack_model(train_loader, attack_model, loss_fn, optimizer)

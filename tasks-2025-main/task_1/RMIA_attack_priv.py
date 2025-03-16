@@ -19,7 +19,6 @@ BATCH_SIZE = 1
 MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
 MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
 
-
 # Definicja transformacji
 transform = transforms.Compose([
     transforms.RandomHorizontalFlip(),  # Augmentacja
@@ -42,7 +41,6 @@ class AttackModel(nn.Module):
         )
 
     def forward(self, x):
-        #print("Shape before fc:", x.shape)
         return self.fc(x)
 
 
@@ -96,7 +94,6 @@ class AttackDataset(torch.utils.data.Dataset):
             with torch.no_grad():
                 feature = self.victim_model(img)
             temp = torch.cat((torch.flatten(img), torch.flatten(feature), label.to(DEVICE).to(torch.float32)))
-            #temp = torch.cat((torch.flatten(img), torch.flatten(feature), label.to(DEVICE).to(torch.float32)))
             tensor_list.append(temp)
             #self.features.append(torch.flatten(feature))
             #self.features.append(label.to(DEVICE).to(torch.float32))
@@ -112,16 +109,52 @@ class AttackDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.membership)
 
+class PrivateAttackDataset(torch.utils.data.Dataset):
+    def __init__(self, victim_model, dataset):
+        self.victim_model = victim_model
+        self.dataset = dataset
+        self.features = []
+        self.prepare_data()
+
+    def prepare_data(self):
+        dataloader = DataLoader(self.dataset, batch_size=BATCH_SIZE, shuffle=False)
+        tensor_list = []
+
+        for _, img, label in dataloader:
+            img = img.to(DEVICE)
+            with torch.no_grad():
+                feature = self.victim_model(img)
+
+            temp = torch.cat((torch.flatten(img), torch.flatten(feature), label.to(DEVICE).float()))
+            tensor_list.append(temp)
+
+        self.features = torch.stack(tensor_list, dim=0)
+
+    def __getitem__(self, index):
+        return self.features[index]
+
+    def __len__(self):
+        return len(self.features)
+
+
+def infer_membership(model, dataset):
+    model.eval()
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+    predictions = []
+    with torch.no_grad():
+        for features in loader:
+            features = features.to(DEVICE)
+            pred = model(features)
+            pred_class = torch.argmax(pred, dim=1).cpu().numpy()  # Wybieramy klasę (0 lub 1)
+            predictions.extend(pred_class)
+
+    return predictions
+
 
 # Trening atakującego modelu
 def train_attack_model(train_loader, model, loss_fn, optimizer, epochs=10):
     model.train()
-    # new
-    for features, membership in train_loader:
-        pred = model(features.to(DEVICE))
-        print(f"Prediction: {pred[:10].tolist()}")  # Zobacz pierwsze 10 wartości
-        break  # Wystarczy raz
-
     for epoch in range(epochs):
         total_loss = 0
         for features, membership in train_loader:
@@ -130,33 +163,31 @@ def train_attack_model(train_loader, model, loss_fn, optimizer, epochs=10):
             loss = loss_fn(pred, membership.view(-1, 1).float())
             optimizer.zero_grad()
             loss.backward()
-            # for name, param in attack_model.named_parameters():
-            #     if param.grad is not None:
-            #         print(f"{name}: {param.grad.abs().mean().item()}")
-
             optimizer.step()
             total_loss += loss.item()
-
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader)}")
 
 
 if __name__ == "__main__":
-    dataset = torch.load(MEMBERSHIP_DATASET_PATH)
-
     victim_model = models.resnet18().to(DEVICE)
     victim_model.fc = torch.nn.Linear(512, 44).to(DEVICE)
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
     victim_model.eval()
-
-    attack_dataset = AttackDataset(victim_model, dataset)
-
-    train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
-
+    
+    # Wczytaj model atakujący
     attack_model = AttackModel().to(DEVICE)
-    loss_fn = nn.BCELoss()
-    optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
+    attack_model.load_state_dict(torch.load("C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/attack_model.pt", map_location=DEVICE))  # Wczytaj trenowany model
+    attack_model.eval()
 
-    train_attack_model(train_loader, attack_model, loss_fn, optimizer)
-    torch.save(attack_model.state_dict(), "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/attack_model.pt")
-    print("Model atakujący zapisany jako attack_model.pt")
+    # Wczytaj PRIVATE dataset
+    private_dataset = torch.load("C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/priv_out.pt")
+    private_attack_dataset = PrivateAttackDataset(victim_model, private_dataset)
 
+    # Przewidź członkostwo
+    membership_predictions = infer_membership(attack_model, private_attack_dataset)
+
+    # Zapisz wyniki do pliku CSV
+    df = pd.DataFrame({"id": list(range(len(membership_predictions))), "membership": membership_predictions})
+    df.to_csv("membership_predictions.csv", index=False)
+
+    print("Predictions saved to membership_predictions.csv")

@@ -3,20 +3,23 @@ import requests
 import torch
 import torch.nn as nn
 import os
+import torchvision.transforms as transforms
 
 from dotenv import load_dotenv
 from torch.utils.data import Dataset
 from torchvision import models
 from typing import Tuple
+import torch.serialization
 
 load_dotenv()
 
-TOKEN = os.environ["ATHENA_TOKEN"]                         # Your token here
+TOKEN = os.environ["ATHENA_TOKEN"]                      # Your token here
 URL = "149.156.182.9:6060/task-1/submit"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 1
-MEMBERSHIP_DATASET_PATH = "tasks-2025-main/task_1/priv_out.pt"       # Path to priv_out_.pt
-MIA_CKPT_PATH = "tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+BATCH_SIZE = 2
+MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
+MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+
 
 
 allowed_models = {
@@ -25,6 +28,11 @@ allowed_models = {
     "resnet50": models.resnet50,
 }
 
+
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.2980, 0.2962, 0.2987], std=[0.2886, 0.2875, 0.2889])
+])
 
 class TaskDataset(Dataset):
     def __init__(self, transform=None):
@@ -58,18 +66,14 @@ class MembershipDataset(TaskDataset):
 
 torch.serialization.add_safe_globals([MembershipDataset])
 
-def custom_collate(batch):
-    batch = [b for b in batch if b is not None]  # Remove None values
-    return torch.utils.data.default_collate(batch)
-
 def inference_dataloader(dataset: MembershipDataset, batch_size):
-    return torch.utils.data.DataLoader(dataset, batch_size, shuffle=False, collate_fn=custom_collate)
+    return torch.utils.data.DataLoader(dataset, batch_size, shuffle=False)
 
 
 def load_model(model_name, model_path):
     try:
         model: nn.Module = allowed_models[model_name](weights=None)
-        model.fc = nn.Linear(model.fc.weight.shape[1], 10)
+        model.fc = nn.Linear(model.fc.weight.shape[1], 44)
     except Exception as e:
         raise Exception(
             f"Invalid model class, {e}, only {allowed_models.keys()} are allowed"
@@ -77,7 +81,7 @@ def load_model(model_name, model_path):
 
     try:
         model_state_dict = torch.load(model_path, map_location=DEVICE)
-        model.load_state_dict(model_state_dict, strict=True)
+        model.load_state_dict(model_state_dict, strict=False)
         model.eval()
     except Exception as e:
         raise Exception(f"Invalid model, {e}")
@@ -88,7 +92,7 @@ def load_model(model_name, model_path):
 def membership_prediction(model):
     dataset: MembershipDataset = torch.load(MEMBERSHIP_DATASET_PATH)
     dataloader = inference_dataloader(dataset, BATCH_SIZE)
-
+    print(len(dataloader.dataset))
     outputs_list = []
 
     for _, img, _ in dataloader:

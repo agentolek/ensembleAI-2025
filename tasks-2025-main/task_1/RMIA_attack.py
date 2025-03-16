@@ -8,11 +8,16 @@ from typing import Tuple
 import torchvision.transforms as transforms
 
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 1
-MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
-MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+MEMBERSHIP_DATASET_PATH = os.environ["PUB_PATH"]       # Path to priv_out_.pt
+MIA_CKPT_PATH = os.environ["01_MIA_69_PATH"]            # Path to 01_MIA_69.pt
 
 # Definicja transformacji
 transform = transforms.Compose([

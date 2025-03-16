@@ -42,7 +42,6 @@ class AttackModel(nn.Module):
         )
 
     def forward(self, x):
-        #print("Shape before fc:", x.shape)
         return self.fc(x)
 
 

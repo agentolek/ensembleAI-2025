@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 from typing import Tuple
 
 
-TOKEN = ""
+TOKEN = "aHX36NuduY3bHcPVeIJMbuW5X0ZBUS"
 SUBMIT_URL = "http://149.156.182.9:6060/task-2/submit"
 RESET_URL = "http://149.156.182.9:6060/task-2/reset"
 QUERY_URL = "http://149.156.182.9:6060/task-2/query"
@@ -134,26 +134,61 @@ def quering_example(data_element):
     return np_array
 
 
+def augmentation(element):
+    # Placeholder - symulacja augmentacji (np. dodanie losowego szumu)
+    # Zwraca zmodyfikowaną wersję elementu
+    return element + torch.randn_like(element) * 0.1  # Przykład: dodanie szumu
+
+
 def train_with_queries(n):
     # wysyłam query z każdego elementu datasetu
     # dla każdego query robię n augmentacji
     # przepuszczam te augemntacje przez model, mierzę loss i robię backprop
     # zwracam model
 
-    # model =
+    model = load_model("/net/tscratch/people/tutorial040/task2/simclr.pth")
 
+    # dataset = load_images()
+    # for element in dataset:
+    #     query_result = quering_example(element)
+    #     for i in range(n):
+    #         aug_item = augmentation(element)
+    #         # aug_result = model.train(aug_item)
+    #         # loss = torch.norm(query_result - aug_result, p=2), l2_distance
+    #         # model.backpropagation
+    # # return model
+
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    criterion = nn.MSELoss()  # L2 loss (MSE)
+
+    # Załaduj dane
     dataset = load_images()
+
+    # Trening
+    # model.train()  # Ustaw model w tryb treningu
+
     for element in dataset:
+        # Querying example
         query_result = quering_example(element)
+
         for i in range(n):
+            # Augmentacja
             aug_item = augmentation(element)
-            # aug_result = model.train(aug_item)
-            # loss = torch.norm(query_result - aug_result, p=2), l2_distance
-            # model.backpropagation
-    # return model
 
+            # Forward pass
+            aug_result = model(aug_item)
 
+            # Obliczanie straty (L2 distance)
+            loss = criterion(aug_result, query_result)
 
+            # Backpropagacja
+            optimizer.zero_grad()  # Zerowanie gradientów
+            loss.backward()  # Obliczanie gradientów
+            optimizer.step()  # Aktualizacja wag
+
+            print(f"Strata po augmentacji {i+1}: {loss.item()}")
+
+    return model
 
 
 class SimpleModel(nn.Module):
@@ -202,16 +237,16 @@ def submitting_example():
 
 def submitting_model():
     # model = nn.Sequential(nn.Flatten(), nn.Linear(32 * 32 * 3, 1024))
+    model = train_with_queries(5)
+    path = 'for_submission_model.onnx'
 
-    path = 'dummy_submission.onnx'
-
-    # torch.onnx.export(
-    #     model,
-    #     torch.randn(1, 3, 32, 32),
-    #     path,
-    #     export_params=True,
-    #     input_names=["x"],
-    # )
+    torch.onnx.export(
+        model,
+        torch.randn(1, 3, 32, 32),
+        path,
+        export_params=True,
+        input_names=["x"],
+    )
 
     with open(path, "rb") as f:
         model = f.read()
@@ -235,6 +270,7 @@ def submitting_model():
 
 if __name__ == '__main__':
     # reset_example()
-    quering_example()
+    # quering_example()
     # quering_random()
     # submitting_example()
+    submitting_model()

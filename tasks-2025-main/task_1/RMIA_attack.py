@@ -41,7 +41,6 @@ class AttackModel(nn.Module):
         )
 
     def forward(self, x):
-        #print("Shape before fc:", x.shape)
         return self.fc(x)
 
 
@@ -143,3 +142,5 @@ if __name__ == "__main__":
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
     train_attack_model(train_loader, attack_model, loss_fn, optimizer)
+
+    torch.save(attack_model, "task1_model.pt")

@@ -13,9 +13,27 @@ from torcheval.metrics import BinaryAUROC
 
 load_dotenv()
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TOKEN = os.environ["ATHENA_TOKEN"]
-URL = "149.156.182.9:6060/task-1/submit"
-PRIVATE_DATASET_PATH = "tasks-2025-main/task_1/priv_out.pt"
+URL = "http://149.156.182.9:6060/task-1/submit"
+PRIVATE_DATASET_PATH = os.environ["PRIV_PATH"]
+
+# Model atakujący (RMIA)
+class AttackModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(3117, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
 
 class TaskDataset(Dataset):
     def __init__(self, transform=None):
@@ -52,8 +70,7 @@ torch.serialization.add_safe_globals([MembershipDataset])
 def inference_dataloader(dataset: MembershipDataset, batch_size):
     return torch.utils.data.DataLoader(dataset, batch_size, shuffle=False)
 
-def membership_prediction():
-
+def random_random():
     dataset: MembershipDataset = torch.load(PRIVATE_DATASET_PATH)
     outputs_list = []
 
@@ -67,8 +84,36 @@ def membership_prediction():
     )
 
 
+def membership_prediction(model):
+
+    if model is None: return random_random()
+
+    dataset: MembershipDataset = torch.load(PRIVATE_DATASET_PATH, map_location=DEVICE)
+    dataloader = inference_dataloader(dataset, 1)
+    outputs_list = []
+
+    for _, img, _ in dataloader:
+        img = img.to(DEVICE)
+
+        with torch.no_grad():
+            membership_output = model(img)
+
+        outputs_list += membership_output.tolist()
+
+    return pd.DataFrame(
+        {
+            "ids": dataset.ids,
+            "score": outputs_list,
+        }
+    )
+
+
 if __name__ == '__main__':
-    preds = membership_prediction()
+    model = AttackModel().to(DEVICE)
+    model.load_state_dict(torch.load("/net/tscratch/people/tutorial040/task1/task1_model.pt", map_location=DEVICE))
+    model.eval()
+
+    preds = membership_prediction(model)
     preds.to_csv("submission.csv", index=False)
 
     result = requests.post(

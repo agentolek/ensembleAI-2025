@@ -7,6 +7,7 @@ import pickle
 import requests
 import torch
 import torch.nn as nn
+from PIL import Image
 
 from torch.utils.data import Dataset
 from typing import Tuple

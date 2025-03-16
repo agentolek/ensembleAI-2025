@@ -13,7 +13,7 @@ from torch.utils.data import Dataset
 from typing import Tuple
 
 
-TOKEN = "aHX36NuduY3bHcPVeIJMbuW5X0ZBUS"
+TOKEN = ""
 SUBMIT_URL = "http://149.156.182.9:6060/task-2/submit"
 RESET_URL = "http://149.156.182.9:6060/task-2/reset"
 QUERY_URL = "http://149.156.182.9:6060/task-2/query"

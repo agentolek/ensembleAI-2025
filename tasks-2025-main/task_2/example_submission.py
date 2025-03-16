@@ -123,9 +123,18 @@ def quering_example():
         print(response.text)
 
 
-def submitting_example():
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super(SimpleModel, self).__init__()
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(32 * 32 * 3, 1024)
 
-    # Create a dummy model
+    def forward(self, x):
+        x = self.flatten(x)
+        return self.fc(x)
+
+
+def submitting_example():
     model = nn.Sequential(nn.Flatten(), nn.Linear(32 * 32 * 3, 1024))
 
     path = 'dummy_submission.onnx'
@@ -138,16 +147,17 @@ def submitting_example():
         input_names=["x"],
     )
 
-    # (these are being ran on the eval endpoint for every submission)
     with open(path, "rb") as f:
         model = f.read()
         try:
-            stolen_model = ort.InferenceSession(model)
+            session_options = ort.SessionOptions()
+            session_options.intra_op_num_threads = 1
+            stolen_model = ort.InferenceSession(model, sess_options=session_options)
         except Exception as e:
             raise Exception(f"Invalid model, {e=}")
         try:
             out = stolen_model.run(
-                None, {"x": np.random.randn(32, 3, 32, 32).astype(np.float32)}
+                None, {"x": np.random.randn(1, 3, 32, 32).astype(np.float32)}
             )[0][0]
         except Exception as e:
             raise Exception(f"Some issue with the input, {e=}")
@@ -159,6 +169,6 @@ def submitting_example():
 
 if __name__ == '__main__':
     # reset_example()
-    quering_example()
+    # quering_example()
     # quering_random()
-    # submitting_example()
+    submitting_example()

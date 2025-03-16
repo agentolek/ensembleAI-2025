@@ -7,6 +7,7 @@ import pickle
 import requests
 import torch
 import torch.nn as nn
+import torchvision
 from PIL import Image
 
 from torch.utils.data import Dataset
@@ -18,6 +19,14 @@ SUBMIT_URL = "http://149.156.182.9:6060/task-2/submit"
 RESET_URL = "http://149.156.182.9:6060/task-2/reset"
 QUERY_URL = "http://149.156.182.9:6060/task-2/query"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def load_model(path):
+    model = torchvision.models.resnet50(weights=None)
+    model.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+    model.maxpool = torch.nn.Identity()
+    model.fc = torch.nn.Linear(in_features=2048, out_features=1024)
+    model.load_state_dict(torch.load(path))
 
 
 class TaskDataset(Dataset):

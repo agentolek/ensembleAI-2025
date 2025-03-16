@@ -27,6 +27,7 @@ def load_model(path):
     model.maxpool = torch.nn.Identity()
     model.fc = torch.nn.Linear(in_features=2048, out_features=1024)
     model.load_state_dict(torch.load(path))
+    return model
 
 
 class TaskDataset(Dataset):
@@ -75,6 +76,7 @@ def load_images():
     dataset = torch.load('/net/tscratch/people/tutorial040/task2/ModelStealingPub.pt', weights_only=False)
     return dataset
 
+
 def get_images():
     dataset = torch.load('/net/tscratch/people/tutorial040/task2/ModelStealingPub.pt', weights_only=False)
     subset = dataset[0][1]  # Modify this if the data is not a tensor
@@ -91,6 +93,7 @@ def get_images():
     # Get the byte data
     return byte_data
 
+
 def quering_random():
     files = [("files", ("image2.png", generate_random_image(), "image/png")) for _ in range(10)]
     response = requests.post(
@@ -105,6 +108,7 @@ def quering_random():
         print(np_array)
     else:
         print(response.text)
+
 
 def reset_example():
     response = requests.post(
@@ -158,7 +162,7 @@ def train_with_queries(n):
     #         # model.backpropagation
     # # return model
 
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     criterion = nn.MSELoss()  # L2 loss (MSE)
 
     # Załaduj dane
@@ -264,8 +268,9 @@ def submitting_model():
             raise Exception(f"Some issue with the input, {e=}")
         assert out.shape == (1024,), "Invalid output shape"
 
-    response = requests.post(SUBMIT_URL, headers={"token": TOKEN}, files={"onnx_model": open(path, "rb")})
-    print(response.status_code, response.text)
+    # response = requests.post(SUBMIT_URL, headers={"token": TOKEN}, files={"onnx_model": open(path, "rb")})
+    # print(response.status_code, response.text)
+    print("Out")
 
 
 if __name__ == '__main__':

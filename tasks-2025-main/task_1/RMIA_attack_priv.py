@@ -72,6 +72,7 @@ class MembershipDataset(TaskDataset):
 
     def __getitem__(self, index) -> Tuple[int, torch.Tensor, int, int]:
         id_, img, label = super().__getitem__(index)
+
         return id_, img, label, self.membership[index]
 
 torch.serialization.add_safe_globals([MembershipDataset])
@@ -128,7 +129,7 @@ class PrivateAttackDataset(torch.utils.data.Dataset):
             temp = torch.cat((torch.flatten(img), torch.flatten(feature), label.to(DEVICE).float()))
             tensor_list.append(temp)
 
-        self.features = torch.stack(tensor_list, dim=0)
+        self.features = torch.stack(tensor_list, dim=0)      #     continue
 
     def __getitem__(self, index):
         return self.features[index]
@@ -173,15 +174,38 @@ if __name__ == "__main__":
     victim_model.fc = torch.nn.Linear(512, 44).to(DEVICE)
     victim_model.load_state_dict(torch.load(MIA_CKPT_PATH, map_location=DEVICE))
     victim_model.eval()
-    
+
     # Wczytaj model atakujący
     attack_model = AttackModel().to(DEVICE)
     attack_model.load_state_dict(torch.load("C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/attack_model.pt", map_location=DEVICE))  # Wczytaj trenowany model
     attack_model.eval()
 
-    # Wczytaj PRIVATE dataset
+    # private_dataset = torch.load("C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/priv_out.pt")
+    # print(f"Typ private_dataset: {type(private_dataset)}")
+
+    # if isinstance(private_dataset, MembershipDataset):
+    #     print("priv_out.pt zawiera cały obiekt MembershipDataset!")
+    #     print(f"Liczba próbek: {len(private_dataset)}")
+    #     print(f"Przykładowa próbka: {private_dataset[0] if len(private_dataset) > 0 else 'BRAK DANYCH'}")
+
+    #     # Jeśli trzeba, można spróbować przekonwertować na listę
+    #     private_dataset = list(private_dataset)  # Konwersja na listę
+
+    # elif isinstance(private_dataset, dict):
+    #     print("priv_out.pt zawiera słownik z danymi!")
+    #     print(f"Klucze: {private_dataset.keys()}")
+
+    # elif isinstance(private_dataset, list):
+    #     print("priv_out.pt zawiera listę!")
+    #     print(f"Liczba elementów: {len(private_dataset)}")
+    # else:
+    #     print("Nieznany format!")
+
+    # exit()
     private_dataset = torch.load("C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/priv_out.pt")
-    private_attack_dataset = PrivateAttackDataset(victim_model, private_dataset)
+    filtered_data = [(idx, img, label) for idx, img, label, _ in private_dataset]
+
+    private_attack_dataset = PrivateAttackDataset(victim_model, filtered_data)
 
     # Przewidź członkostwo
     membership_predictions = infer_membership(attack_model, private_attack_dataset)

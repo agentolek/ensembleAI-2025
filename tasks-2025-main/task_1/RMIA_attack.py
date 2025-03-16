@@ -6,11 +6,16 @@ import torchvision.models as models
 from torch.utils.data import DataLoader
 from typing import Tuple
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 # Ustawienia
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 1
-MEMBERSHIP_DATASET_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/pub.pt"       # Path to priv_out_.pt
-MIA_CKPT_PATH = "C:/Hackathons/ensembleAI-2025/tasks-2025-main/task_1/01_MIA_69.pt"                 # Path to 01_MIA_69.pt
+MEMBERSHIP_DATASET_PATH = os.environ["PUB_PATH"]       # Path to priv_out_.pt
+MIA_CKPT_PATH = os.environ["01_MIA_69_PATH"]            # Path to 01_MIA_69.pt
 
 # Model atakujący (RMIA)
 class AttackModel(nn.Module):
@@ -97,14 +102,14 @@ class AttackDataset(torch.utils.data.Dataset):
 
 
 # Trening atakującego modelu
-def train_attack_model(train_loader, model, criterion, optimizer, epochs=10):
+def train_attack_model(train_loader, model, loss_fn, optimizer, epochs=10):
     model.train()
     for epoch in range(epochs):
         total_loss = 0
         for features, membership in train_loader:
             features, membership = features.to(DEVICE), membership.to(DEVICE)
             pred = model(features)
-            loss = criterion(pred, membership.view(-1, 1).float())
+            loss = loss_fn(pred, membership.view(-1, 1).float())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -124,7 +129,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(attack_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     attack_model = AttackModel().to(DEVICE)
-    criterion = nn.BCELoss()
+    loss_fn = nn.BCELoss()
     optimizer = optim.Adam(attack_model.parameters(), lr=0.001)
 
-    train_attack_model(train_loader, attack_model, criterion, optimizer)
+    train_attack_model(train_loader, attack_model, loss_fn, optimizer)
